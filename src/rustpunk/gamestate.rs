@@ -12,6 +12,7 @@ use tcod::map::FovAlgorithm;
 
 const MAP_SIZE: i32 = 128;
 
+/// Map and related data.
 pub struct Map {
     map: Array2D<Tile>,
     tcod_map: tcod::Map,
@@ -44,12 +45,15 @@ impl Map {
     }
 }
 
+/// The game state structure contains everything that would
+/// need to be stored in the savefile when the game is saved.
 pub struct GameState {
     map: Map,
     objects: Vec<Object>,
 }
 
 impl GameState {
+    /// Instantiates a fresh game state
     pub fn new() -> Self {
         let map = make_map();
         let mut freespot = 0;
@@ -66,6 +70,7 @@ impl GameState {
         }
     }
 
+    /// Advances the game state by one tick.
     pub fn update(&mut self) {
         let map = &self.map;
 
@@ -107,6 +112,8 @@ impl GameState {
         }
     }
 
+    /// Checks whether the tile at position `pos` is currently visible to
+    /// the player.
     fn is_visible(&self, pos: Pos) -> bool {
         let in_bounds = 
             pos.x >=0 &&
@@ -120,6 +127,7 @@ impl GameState {
             }
     }
 
+    /// Renders all tiles and game objects on the screen.
     pub fn render(&self, cam_pos: Pos, con: &mut dyn Console) {
         con.set_default_foreground(WHITE);
         con.clear();
@@ -142,6 +150,7 @@ impl GameState {
         }
     }
 
+    /// Get a mutable reference to the player object.
     pub fn get_player_mut(&mut self) -> &mut Object {
         let player = self.objects.get_mut(0);
         match player {
@@ -150,6 +159,7 @@ impl GameState {
         }
     }
 
+    /// Get a reference to the player object.
     pub fn get_player(&self) -> &Object {
         let player = self.objects.get(0);
         match player {
@@ -158,12 +168,15 @@ impl GameState {
         }
     }
 
+    /// Tell the player object to do a move action on the next tick.
     pub fn player_move(&mut self, delta: Pos) {
         let p = self.get_player_mut();
         p.move_by(delta);
     }
 }
 
+/// Generates a map using binary space partitioning. This will result in
+/// a map that resembles city streets.
 fn make_map() -> Map {
     const STREET_WIDTH: i32 = 4;
     let mut map = Array2D::filled_with(
