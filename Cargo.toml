@@ -9,3 +9,5 @@ edition = "2018"
 [dependencies]
 tcod = "0.15"
 array2d = "0.2.1"
+sqlite = "0.24.0"
+rand = "0.7.3"
