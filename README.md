@@ -1,4 +1,4 @@
 # Rustpunk
 
 ## Build
-  cargo run
+    cargo run
