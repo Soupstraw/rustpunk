@@ -43,3 +43,4 @@ impl Object {
         self.action = Action::Move(delta);
     }
 }
+

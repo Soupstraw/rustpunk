@@ -56,41 +56,62 @@ impl GameState {
     /// Instantiates a fresh game state
     pub fn new() -> Self {
         let map = make_map();
-        let mut freespot = 0;
-        for i in 0..MAP_SIZE-1{
-            if !map.get_tile(Pos::new(i, i)).solid {
-                freespot = i;
+        let mut gs = GameState {
+            map: map,
+            objects: Vec::new(),
+        };
+        gs.populate();
+        gs
+    }
+
+    pub fn populate(&mut self) {
+        let mut npcs = Vec::new();
+        let rng = Rng::get_instance();
+        for _ in 1..1000 {
+            let pos = Pos::new(
+                rng.get_int(0, MAP_SIZE-1), 
+                rng.get_int(0, MAP_SIZE-1));
+                if self.is_walkable(pos) {
+                    let player = Object::new(pos, '@', WHITE);
+                    npcs.push(player);
+                    break
+                }
+        }
+        for _ in 1..100 {
+            for _ in 1..1000 {
+                let pos = Pos::new(
+                    rng.get_int(0, MAP_SIZE-1), 
+                    rng.get_int(0, MAP_SIZE-1));
+                if self.is_walkable(pos) {
+                    let npc = Object::new(pos, '@', BLUE);
+                    npcs.push(npc);
+                    break
+                }
             }
         }
-        let player = Object::new(Pos::new(freespot, freespot), '@', WHITE);
-        let npc = Object::new(Pos::new(3, 2), '@', BLUE);
-        GameState {
-            map: map,
-            objects: vec![player, npc],
-        }
+        self.objects = npcs;
     }
 
     /// Advances the game state by one tick.
     pub fn update(&mut self) {
-        let map = &self.map;
-
         // Update objects
-        for o in &mut self.objects {
+        let mut objs = self.objects.clone();
+        for mut o in &mut objs {
             match o.action {
                 Action::Idle      => {}
                 Action::Move(pos) => {
                     let new_pos = pos + o.pos;
-                    let map_collision = map.get_tile(new_pos).solid;
-                    if !map_collision {
+                    if self.is_walkable(new_pos) {
                         o.pos = new_pos;
                     }
                     o.action = Action::Idle
                 }
             }
         }
+        self.objects = objs;
 
         // Update FOV
-        let player_pos = &self.get_player().pos;
+        let player_pos = self.get_player().pos;
         self.map.tcod_map.compute_fov(
             player_pos.x, 
             player_pos.y, 
@@ -172,6 +193,12 @@ impl GameState {
     pub fn player_move(&mut self, delta: Pos) {
         let p = self.get_player_mut();
         p.move_by(delta);
+    }
+
+    pub fn is_walkable(&self, pos: Pos) -> bool {
+        let map_collision = self.map.get_tile(pos).solid;
+        let obj_collision = self.objects.iter().any(|x| x.pos == pos);
+        !map_collision && !obj_collision
     }
 }
 
