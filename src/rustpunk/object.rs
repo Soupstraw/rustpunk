@@ -3,18 +3,28 @@ use crate::rustpunk::pos::Pos;
 use tcod::colors::Color;
 use tcod::console::*;
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub enum Action {
     Idle,
     Move(Pos),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy, PartialEq)]
+pub enum Faction {
+    Neutral,
+    Enemy,
+}
+
+#[derive(Clone, Copy)]
 pub struct Object {
     pub pos: Pos,
     pub char: char,
     pub color: Color,
     pub action: Action,
+    pub health: i32,
+    pub attack: i32,
+    pub faction: Faction,
+    pub alive: bool,
 }
 
 impl Object {
@@ -24,14 +34,18 @@ impl Object {
             char: char, 
             color: color,
             action: Action::Idle,
+            health: 10,
+            attack: 1,
+            faction: Faction::Neutral,
+            alive: true,
         }
     }
 
     pub fn draw(&self, pos: Pos, con: &mut dyn Console) {
         let in_bounds = 
             pos.x >= 0 && 
-            pos.x < con.width() && 
             pos.y >= 0 &&
+            pos.x < con.width() && 
             pos.y < con.height();
         if in_bounds {
             con.set_default_foreground(self.color);
@@ -39,8 +53,8 @@ impl Object {
         }
     }
 
-    pub fn move_by(&mut self, delta: Pos) {
-        self.action = Action::Move(delta);
+    pub fn attack(&self, other: &mut Object) {
+        other.health -= self.attack;
     }
 }
 

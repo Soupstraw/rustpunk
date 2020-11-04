@@ -1,3 +1,5 @@
+use std::cmp::Ordering;
+use core::cmp::max;
 use array2d::Array2D;
 
 use crate::rustpunk::tile::Tile;
@@ -22,8 +24,8 @@ impl Map {
     fn new(map: Array2D<Tile>) -> Self {
         let tcod_map = tcod::Map::new(MAP_SIZE, MAP_SIZE);
         let mut m = Map { map, tcod_map };
-        for x in 0..MAP_SIZE-1 {
-            for y in 0..MAP_SIZE-1 {
+        for x in 0..MAP_SIZE {
+            for y in 0..MAP_SIZE {
                 let tile = m.map
                     .get(x as usize, y as usize)
                     .expect("Tile out of bounds");
@@ -42,6 +44,10 @@ impl Map {
 
     fn get_tile_mut(&mut self, pos: Pos) -> Option<&mut Tile> {
         self.map.get_mut(pos.x as usize, pos.y as usize)
+    }
+
+    pub fn is_solid(&self, pos: Pos) -> bool {
+        self.get_tile(pos).solid
     }
 }
 
@@ -64,18 +70,19 @@ impl GameState {
         gs
     }
 
+    /// Randomly populates the map with NPCs
     pub fn populate(&mut self) {
         let mut npcs = Vec::new();
         let rng = Rng::get_instance();
-        for _ in 1..1000 {
+        loop {
             let pos = Pos::new(
                 rng.get_int(0, MAP_SIZE-1), 
                 rng.get_int(0, MAP_SIZE-1));
-                if self.is_walkable(pos) {
-                    let player = Object::new(pos, '@', WHITE);
-                    npcs.push(player);
-                    break
-                }
+            if self.is_walkable(pos) {
+                let player = Object::new(pos, '@', WHITE);
+                npcs.push(player);
+                break
+            }
         }
         for _ in 1..100 {
             for _ in 1..1000 {
@@ -83,7 +90,8 @@ impl GameState {
                     rng.get_int(0, MAP_SIZE-1), 
                     rng.get_int(0, MAP_SIZE-1));
                 if self.is_walkable(pos) {
-                    let npc = Object::new(pos, '@', BLUE);
+                    let mut npc = Object::new(pos, '@', BLUE);
+                    npc.faction = Faction::Enemy;
                     npcs.push(npc);
                     break
                 }
@@ -95,20 +103,33 @@ impl GameState {
     /// Advances the game state by one tick.
     pub fn update(&mut self) {
         // Update objects
-        let mut objs = self.objects.clone();
-        for mut o in &mut objs {
+        let ref objs = self.objects;
+        for i in 0..objs.len() {
+            let o = objs[i];
             match o.action {
                 Action::Idle      => {}
                 Action::Move(pos) => {
                     let new_pos = pos + o.pos;
                     if self.is_walkable(new_pos) {
-                        o.pos = new_pos;
+                        let ref mut o_mut = self.objects[i];
+                        o_mut.pos = new_pos;
+                        o_mut.action = Action::Idle;
+                        break;
                     }
-                    o.action = Action::Idle
+                    match objs.iter().position(|x| x.pos == new_pos) {
+                        Some(idx) => {
+                            let (o_mut, other) = mut_two(i, idx, &mut self.objects[..])
+                                .expect("Object is trying to move onto itself");
+                            other.health -= o.attack;
+                            o_mut.action = Action::Idle;
+                            println!("Attacking, {} HP left", other.health);
+                            break;
+                        }
+                        None => {}
+                    }
                 }
             }
         }
-        self.objects = objs;
 
         // Update FOV
         let player_pos = self.get_player().pos;
@@ -120,8 +141,8 @@ impl GameState {
             FovAlgorithm::Basic);
 
         // Update fog of war
-        for x in 0..MAP_SIZE-1 {
-            for y in 0..MAP_SIZE-1 {
+        for x in 0..MAP_SIZE {
+            for y in 0..MAP_SIZE {
                 if self.map.tcod_map.is_in_fov(x, y) {
                     let pos = Pos::new(x, y);
                     match self.map.get_tile_mut(pos) {
@@ -191,14 +212,17 @@ impl GameState {
 
     /// Tell the player object to do a move action on the next tick.
     pub fn player_move(&mut self, delta: Pos) {
-        let p = self.get_player_mut();
-        p.move_by(delta);
+        self.get_player_mut().action = Action::Move(delta);
+        self.update();
     }
 
     pub fn is_walkable(&self, pos: Pos) -> bool {
-        let map_collision = self.map.get_tile(pos).solid;
-        let obj_collision = self.objects.iter().any(|x| x.pos == pos);
-        !map_collision && !obj_collision
+        !self.map.is_solid(pos) && !self.object_at(pos).is_some()
+    }
+
+
+    pub fn object_at(&self, pos: Pos) -> Option<usize> {
+        self.objects.iter().position(|x| x.pos == pos)
     }
 }
 
@@ -220,11 +244,28 @@ fn make_map() -> Map {
                     x - b.x >= STREET_WIDTH && 
                     y - b.y >= STREET_WIDTH;
                 if !draw_wall {
-                    map.set(x as usize, y as usize, Tile::empty());
+                    map.set(x as usize, y as usize, Tile::empty())
+                        .expect("Could not set tile");
                 }
             }
         }
         true
     });
     Map::new(map)
+}
+
+/// Mutably borrow two *separate* elements from the given slice.
+/// Panics when the indexes are equal or out of bounds.
+fn mut_two<T>(
+    first_index: usize, 
+    second_index: usize, 
+    items: &mut [T]) -> Option<(&mut T, &mut T)> {
+
+    let split_at_index = max(first_index, second_index);
+    let (first_slice, second_slice) = items.split_at_mut(split_at_index);
+    match first_index.cmp(&second_index) {
+        Ordering::Less    => Some((&mut first_slice[first_index], &mut second_slice[0])),
+        Ordering::Greater => Some((&mut second_slice[0], &mut first_slice[second_index])),
+        Ordering::Equal   => None,
+    }
 }

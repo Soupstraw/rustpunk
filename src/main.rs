@@ -31,10 +31,10 @@ fn main() {
     let mut tcod = Tcod { root, con };
     tcod::system::set_fps(LIMIT_FPS);
     
+    state.update();
     while !tcod.root.window_closed() {
         let player_pos = state.get_player().pos;
         let win_dim = Pos::new(tcod.con.width()/2, tcod.con.height()/2);
-        state.update();
         state.render(player_pos - win_dim, &mut tcod.con);
         blit(
             &tcod.con, 
