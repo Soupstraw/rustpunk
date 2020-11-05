@@ -116,13 +116,13 @@ impl GameState {
                         o_mut.action = Action::Idle;
                         break;
                     }
-                    match objs.iter().position(|x| x.pos == new_pos) {
+                    match objs.iter().position(|x| x.pos == new_pos && x.blocking) {
                         Some(idx) => {
                             let (o_mut, other) = mut_two(i, idx, &mut self.objects[..])
                                 .expect("Object is trying to move onto itself");
-                            other.health -= o.attack;
-                            o_mut.action = Action::Idle;
                             println!("Attacking, {} HP left", other.health);
+                            o.attack(other);
+                            o_mut.action = Action::Idle;
                             break;
                         }
                         None => {}
@@ -185,11 +185,21 @@ impl GameState {
                 }
             }
         }
-        for o in &self.objects {
+        // Draw non-blocking objects
+        for o in self.objects[1..].iter().filter(|x| !x.blocking) {
             if self.is_visible(o.pos){
                 o.draw(o.pos - cam_pos, con);
             }
         }
+        // Draw blocking objects
+        for o in self.objects[1..].iter().filter(|x| x.blocking) {
+            if self.is_visible(o.pos){
+                o.draw(o.pos - cam_pos, con);
+            }
+        }
+        // Draw player
+        let player = self.objects[0];
+        player.draw(player.pos - cam_pos, con);
     }
 
     /// Get a mutable reference to the player object.
@@ -217,7 +227,11 @@ impl GameState {
     }
 
     pub fn is_walkable(&self, pos: Pos) -> bool {
-        !self.map.is_solid(pos) && !self.object_at(pos).is_some()
+        let blocking_object = self
+            .object_at(pos)
+            .map(|i| self.objects[i].blocking)
+            .unwrap_or(false);
+        !self.map.is_solid(pos) && !blocking_object
     }
 
 

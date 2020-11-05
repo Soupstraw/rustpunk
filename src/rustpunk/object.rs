@@ -1,6 +1,6 @@
 use crate::rustpunk::pos::Pos;
 
-use tcod::colors::Color;
+use tcod::colors::*;
 use tcod::console::*;
 
 #[derive(Clone, Copy)]
@@ -25,6 +25,7 @@ pub struct Object {
     pub attack: i32,
     pub faction: Faction,
     pub alive: bool,
+    pub blocking: bool,
 }
 
 impl Object {
@@ -38,6 +39,7 @@ impl Object {
             attack: 1,
             faction: Faction::Neutral,
             alive: true,
+            blocking: true,
         }
     }
 
@@ -54,7 +56,17 @@ impl Object {
     }
 
     pub fn attack(&self, other: &mut Object) {
-        other.health -= self.attack;
+        other.take_damage(self.attack);
+    }
+
+    pub fn take_damage(&mut self, damage: i32) {
+        self.health -= damage;
+        if self.health <= 0 {
+            self.blocking = false;
+            self.char = '%';
+            self.color = DARK_RED;
+            println!("It died!");
+        }
     }
 }
 
