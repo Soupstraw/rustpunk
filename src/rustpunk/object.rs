@@ -1,4 +1,5 @@
 use crate::rustpunk::pos::Pos;
+use crate::rustpunk::message::Message;
 
 use tcod::colors::*;
 use tcod::console::*;
@@ -16,10 +17,11 @@ pub enum Faction {
 }
 
 #[derive(Clone, Copy)]
-pub struct Object {
+pub struct Object<'a> {
     pub pos: Pos,
     pub char: char,
     pub color: Color,
+    pub name: &'a str,
     pub action: Action,
     pub health: i32,
     pub attack: i32,
@@ -28,12 +30,13 @@ pub struct Object {
     pub blocking: bool,
 }
 
-impl Object {
-    pub fn new(pos: Pos, char: char, color: Color) -> Self {
+impl<'a> Object<'a> {
+    pub fn new(pos: Pos, char: char, color: Color, name: &'a str) -> Object<'a> {
         Object { 
             pos: pos, 
             char: char, 
             color: color,
+            name: name,
             action: Action::Idle,
             health: 10,
             attack: 1,
@@ -55,8 +58,12 @@ impl Object {
         }
     }
 
-    pub fn attack(&self, other: &mut Object) {
+    pub fn attack(&self, other: &mut Object) -> Message {
         other.take_damage(self.attack);
+        let msg = format!(
+            "{} attacks {} for {} damage.", 
+            self.name, other.name, self.attack);
+        Message::new(msg)
     }
 
     pub fn take_damage(&mut self, damage: i32) {
@@ -65,7 +72,7 @@ impl Object {
             self.blocking = false;
             self.char = '%';
             self.color = DARK_RED;
-            println!("It died!");
+            self.alive = false;
         }
     }
 }

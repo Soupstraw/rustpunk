@@ -5,6 +5,7 @@ use array2d::Array2D;
 use crate::rustpunk::tile::Tile;
 use crate::rustpunk::object::*;
 use crate::rustpunk::pos::Pos;
+use crate::rustpunk::message::Message;
 
 use tcod::console::*;
 use tcod::colors::*;
@@ -13,6 +14,8 @@ use tcod::random::Rng;
 use tcod::map::FovAlgorithm;
 
 const MAP_SIZE: i32 = 128;
+const VIEWPORT_WIDTH: i32 = 80;
+const VIEWPORT_HEIGHT: i32 = 50;
 
 /// Map and related data.
 pub struct Map {
@@ -53,18 +56,20 @@ impl Map {
 
 /// The game state structure contains everything that would
 /// need to be stored in the savefile when the game is saved.
-pub struct GameState {
+pub struct GameState<'a> {
     map: Map,
-    objects: Vec<Object>,
+    objects: Vec<Object<'a>>,
+    messages: Vec<Message>,
 }
 
-impl GameState {
+impl<'a> GameState<'a> {
     /// Instantiates a fresh game state
     pub fn new() -> Self {
         let map = make_map();
         let mut gs = GameState {
             map: map,
             objects: Vec::new(),
+            messages: Vec::new(),
         };
         gs.populate();
         gs
@@ -79,7 +84,7 @@ impl GameState {
                 rng.get_int(0, MAP_SIZE-1), 
                 rng.get_int(0, MAP_SIZE-1));
             if self.is_walkable(pos) {
-                let player = Object::new(pos, '@', WHITE);
+                let player = Object::new(pos, '@', WHITE, "player");
                 npcs.push(player);
                 break
             }
@@ -90,7 +95,7 @@ impl GameState {
                     rng.get_int(0, MAP_SIZE-1), 
                     rng.get_int(0, MAP_SIZE-1));
                 if self.is_walkable(pos) {
-                    let mut npc = Object::new(pos, '@', BLUE);
+                    let mut npc = Object::new(pos, '@', BLUE, "innocent bystander");
                     npc.faction = Faction::Enemy;
                     npcs.push(npc);
                     break
@@ -120,9 +125,14 @@ impl GameState {
                         Some(idx) => {
                             let (o_mut, other) = mut_two(i, idx, &mut self.objects[..])
                                 .expect("Object is trying to move onto itself");
-                            println!("Attacking, {} HP left", other.health);
-                            o.attack(other);
+                            let msg = o.attack(other);
                             o_mut.action = Action::Idle;
+                            // Append an attack message
+                            self.messages.push(msg);
+                            if !other.alive {
+                                let msg = Message::new(format!("{} dies!", other.name));
+                                self.messages.push(msg);
+                            }
                             break;
                         }
                         None => {}
@@ -169,14 +179,34 @@ impl GameState {
             }
     }
 
+    fn cam_pos(&self) -> Pos {
+        self.get_player().pos - Pos::new(VIEWPORT_WIDTH/2, VIEWPORT_HEIGHT/2)
+    }
+
+    fn render_object(&self, con: &mut dyn Console, o: &Object) {
+        if self.is_visible(o.pos){
+            let view_pos = o.pos - self.cam_pos();
+            if view_pos.x >= 0 && view_pos.x < VIEWPORT_WIDTH &&
+               view_pos.y >= 0 && view_pos.y < VIEWPORT_HEIGHT {
+                o.draw(view_pos, con);
+            }
+        }
+    }
+
+    /// Renders the whole screen
+    pub fn render(&self, con: &mut Offscreen) {
+        self.render_viewport(con);
+        self.render_gui(con);
+    }
+
     /// Renders all tiles and game objects on the screen.
-    pub fn render(&self, cam_pos: Pos, con: &mut dyn Console) {
+    fn render_viewport(&self, con: &mut dyn Console) {
         con.set_default_foreground(WHITE);
         con.clear();
-        for sx in 0..con.width() {
-            for sy in 0..con.height() {
+        for sx in 0..VIEWPORT_WIDTH {
+            for sy in 0..VIEWPORT_HEIGHT {
                 let pos = Pos::new(sx, sy);
-                let wpos = pos + cam_pos;
+                let wpos = pos + self.cam_pos();
                 let tile = self.map.get_tile(wpos);
                 if self.is_visible(wpos) {
                     tile.draw(pos, con);
@@ -187,23 +217,27 @@ impl GameState {
         }
         // Draw non-blocking objects
         for o in self.objects[1..].iter().filter(|x| !x.blocking) {
-            if self.is_visible(o.pos){
-                o.draw(o.pos - cam_pos, con);
-            }
+            &self.render_object(con, o);
         }
         // Draw blocking objects
         for o in self.objects[1..].iter().filter(|x| x.blocking) {
-            if self.is_visible(o.pos){
-                o.draw(o.pos - cam_pos, con);
-            }
+            &self.render_object(con, o);
         }
         // Draw player
         let player = self.objects[0];
-        player.draw(player.pos - cam_pos, con);
+        player.draw(player.pos - self.cam_pos(), con);
+    }
+
+    fn render_gui(&self, con: &mut Offscreen) {
+        let idx = max(self.messages.len() as i32 - 5, 0);
+        let tail = &self.messages[idx as usize..];
+        for i in 0..tail.len() {
+            con.print(0, 40 + i as i32, &tail[i].text);
+        }
     }
 
     /// Get a mutable reference to the player object.
-    pub fn get_player_mut(&mut self) -> &mut Object {
+    pub fn get_player_mut(&mut self) -> &mut Object<'a> {
         let player = self.objects.get_mut(0);
         match player {
             Some(p) => p,
@@ -222,7 +256,11 @@ impl GameState {
 
     /// Tell the player object to do a move action on the next tick.
     pub fn player_move(&mut self, delta: Pos) {
-        self.get_player_mut().action = Action::Move(delta);
+        if delta != Pos::zero() {
+            self.get_player_mut().action = Action::Move(delta);
+        } else {
+            self.get_player_mut().action = Action::Idle;
+        }
         self.update();
     }
 

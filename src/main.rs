@@ -35,7 +35,7 @@ fn main() {
     while !tcod.root.window_closed() {
         let player_pos = state.get_player().pos;
         let win_dim = Pos::new(tcod.con.width()/2, tcod.con.height()/2);
-        state.render(player_pos - win_dim, &mut tcod.con);
+        state.render(&mut tcod.con);
         blit(
             &tcod.con, 
             (0, 0), 
@@ -63,21 +63,26 @@ fn handle_keys(tcod: &mut Tcod, state: &mut GameState) -> bool {
     }
 
     // Handle movement
-    let (dx, dy) = match key {
-        Key { printable: 'h', .. } => (-1,  0),
-        Key { printable: 'l', .. } => ( 1,  0),
-        Key { printable: 'k', .. } => ( 0, -1),
-        Key { printable: 'j', .. } => ( 0,  1),
-        Key { printable: 'y', .. } => (-1, -1),
-        Key { printable: 'u', .. } => ( 1, -1),
-        Key { printable: 'b', .. } => (-1,  1),
-        Key { printable: 'n', .. } => ( 1,  1),
-        _                          => ( 0,  0),
+    let delta = match key {
+        Key { printable: 'h', .. } => Some((-1,  0)),
+        Key { printable: 'l', .. } => Some(( 1,  0)),
+        Key { printable: 'k', .. } => Some(( 0, -1)),
+        Key { printable: 'j', .. } => Some(( 0,  1)),
+        Key { printable: 'y', .. } => Some((-1, -1)),
+        Key { printable: 'u', .. } => Some(( 1, -1)),
+        Key { printable: 'b', .. } => Some((-1,  1)),
+        Key { printable: 'n', .. } => Some(( 1,  1)),
+        Key { printable: '.', .. } => Some(( 0,  0)),
+        _                          => None,
     };
 
-    state.player_move(Pos::new(dx, dy));
-    state.update();
-
+    match delta {
+        Some((dx, dy)) => {
+            state.player_move(Pos::new(dx, dy));
+            state.update();
+        }
+        None => {}
+    }
     false
 }
 
