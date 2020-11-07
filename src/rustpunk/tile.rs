@@ -20,7 +20,7 @@ impl Tile {
             solid: false,
             opaque: false,
             char: '.',
-            color: GREY,
+            color: LIGHTEST_GREY,
             explored: false,
         }
     }
@@ -39,13 +39,20 @@ impl Tile {
     /// Draws the tile
     pub fn draw(&self, pos: Pos, con: &mut dyn Console) {
         con.set_default_foreground(self.color);
-        con.put_char(pos.x, pos.y, self.char, BackgroundFlag::None);
+        con.set_default_background(LIGHT_GREY);
+        con.put_char(pos.x, pos.y, self.char, BackgroundFlag::Set);
     }
 
     /// Draws the tile with unsaturated colors (e.g. for tiles that are explored
     /// but not visible)
     pub fn draw_fow(&self, pos: Pos, con: &mut dyn Console) {
         con.set_default_foreground(self.color.scale_hsv(0.2, 0.2));
-        con.put_char(pos.x, pos.y, self.char, BackgroundFlag::None);
+        con.set_default_background(GREY);
+        con.put_char(pos.x, pos.y, self.char, BackgroundFlag::Set);
+    }
+
+    pub fn draw_unexplored(&self, pos: Pos, con: &mut dyn Console) {
+        con.set_default_background(BLACK);
+        con.put_char(pos.x, pos.y, ' ', BackgroundFlag::Set);
     }
 }

@@ -20,8 +20,8 @@ const VIEWPORT_HEIGHT: i32 = 50;
 const MSG_DISPLAY_COUNT: i32 = 5;
 const HEALTH_BAR_WIDTH: i32 = 20;
 const HEALTH_BAR_BG_COLOR: Color = DARKEST_RED;
-const HEALTH_BAR_FG_COLOR: Color = RED;
-const DEFAULT_BACKGROUND_COLOR: Color = BLACK;
+const HEALTH_BAR_FG_COLOR: Color = DARK_RED;
+const DEFAULT_BACKGROUND_COLOR: Color = GREY;
 
 /// Map and related data.
 pub struct Map {
@@ -222,6 +222,8 @@ impl<'a> GameState<'a> {
                     tile.draw(pos, con);
                 } else if tile.explored {
                     tile.draw_fow(pos, con);
+                } else {
+                    tile.draw_unexplored(pos, con);
                 }
             }
         }
@@ -247,6 +249,8 @@ impl<'a> GameState<'a> {
         }
         let player = self.get_player();
         let player_health_ratio: f32 = player.health as f32 / player.max_health as f32;
+        con.set_default_foreground(WHITE);
+        con.print(0, VIEWPORT_HEIGHT - MSG_DISPLAY_COUNT - 2, "HP");
         for i in 0..HEALTH_BAR_WIDTH {
             let color = if player_health_ratio <= i as f32 / HEALTH_BAR_WIDTH as f32 {
                 HEALTH_BAR_BG_COLOR
@@ -255,8 +259,8 @@ impl<'a> GameState<'a> {
             };
             con.set_default_background(color);
             con.put_char(
-                i,
-                VIEWPORT_HEIGHT - MSG_DISPLAY_COUNT - 1,
+                i+3,
+                VIEWPORT_HEIGHT - MSG_DISPLAY_COUNT - 2,
                 ' ',
                 BackgroundFlag::Set)
         }
