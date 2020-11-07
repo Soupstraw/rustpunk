@@ -1,3 +1,4 @@
+use num::signum;
 use std::ops::Add;
 use std::ops::AddAssign;
 use std::ops::Sub;
@@ -19,6 +20,27 @@ impl Pos {
 
     pub fn tup(self) -> (i32, i32) {
         (self.x, self.y)
+    }
+
+    pub fn to_dir(self) -> Option<Dir> {
+        match self.tup() {
+            ( 0, -1) => Some(Dir::N),
+            ( 0,  1) => Some(Dir::S),
+            (-1,  0) => Some(Dir::W),
+            ( 1,  0) => Some(Dir::E),
+            ( 1, -1) => Some(Dir::NE),
+            (-1, -1) => Some(Dir::NW),
+            ( 1,  1) => Some(Dir::SE),
+            (-1,  1) => Some(Dir::SW),
+            _        => None,
+        }
+    }
+
+    pub fn dir_towards(self, target: Pos) -> Option<Dir> {
+        let delta = target - self;
+        let x = signum(delta.x);
+        let y = signum(delta.y);
+        Pos::new(x, y).to_dir()
     }
 }
 
@@ -50,3 +72,25 @@ impl AddAssign for Pos {
         self.y = other.y;
     }
 }
+
+#[derive(Clone, Copy, Debug)]
+pub enum Dir {
+    N, E, S, W,
+    NE, SE, SW, NW,
+}
+
+impl Dir {
+    pub fn to_pos(self) -> Pos {
+        match self {
+            Dir::N => Pos::new( 0, -1),
+            Dir::S => Pos::new( 0,  1),
+            Dir::W => Pos::new(-1,  0),
+            Dir::E => Pos::new( 1,  0),
+            Dir::NE => Pos::new( 1, -1),
+            Dir::NW => Pos::new(-1, -1),
+            Dir::SE => Pos::new( 1,  1),
+            Dir::SW => Pos::new(-1,  1),
+        }
+    }
+}
+

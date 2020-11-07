@@ -7,6 +7,7 @@ use crate::rustpunk::object::*;
 use crate::rustpunk::pos::Pos;
 use crate::rustpunk::message::Message;
 
+use tcod::line::*;
 use tcod::console::*;
 use tcod::colors::*;
 use tcod::bsp::*;
@@ -84,18 +85,20 @@ impl<'a> GameState<'a> {
                 rng.get_int(0, MAP_SIZE-1), 
                 rng.get_int(0, MAP_SIZE-1));
             if self.is_walkable(pos) {
-                let player = Object::new(pos, '@', WHITE, "player");
+                let mut player = Object::new(pos, '@', WHITE, "player");
+                player.controller = Controller::player_controller();
                 npcs.push(player);
                 break
             }
         }
-        for _ in 1..100 {
+        for _ in 1..5 {
             for _ in 1..1000 {
                 let pos = Pos::new(
                     rng.get_int(0, MAP_SIZE-1), 
                     rng.get_int(0, MAP_SIZE-1));
                 if self.is_walkable(pos) {
                     let mut npc = Object::new(pos, '@', BLUE, "innocent bystander");
+                    npc.controller = Controller::aggressive_ai();
                     npc.faction = Faction::Enemy;
                     npcs.push(npc);
                     break
@@ -108,38 +111,42 @@ impl<'a> GameState<'a> {
     /// Advances the game state by one tick.
     pub fn update(&mut self) {
         // Update objects
-        let ref objs = self.objects;
+        let mut objs = self.objects.clone();
         for i in 0..objs.len() {
-            let o = objs[i];
-            match o.action {
+            let mut o = objs[i];
+            // Do nothing if object is dead
+            if !o.alive {
+                continue;
+            }
+            // Ask the controller for the next action
+            match o.next_action(self) {
                 Action::Idle      => {}
                 Action::Move(pos) => {
-                    let new_pos = pos + o.pos;
+                    let new_pos = pos.to_pos() + o.pos;
                     if self.is_walkable(new_pos) {
-                        let ref mut o_mut = self.objects[i];
-                        o_mut.pos = new_pos;
-                        o_mut.action = Action::Idle;
-                        break;
-                    }
-                    match objs.iter().position(|x| x.pos == new_pos && x.blocking) {
-                        Some(idx) => {
-                            let (o_mut, other) = mut_two(i, idx, &mut self.objects[..])
-                                .expect("Object is trying to move onto itself");
-                            let msg = o.attack(other);
-                            o_mut.action = Action::Idle;
-                            // Append an attack message
-                            self.messages.push(msg);
-                            if !other.alive {
-                                let msg = Message::new(format!("{} dies!", other.name));
+                        // Walk if there is nothing in the way
+                        o.pos = new_pos;
+                    } else {
+                        // Check whether the thing in the way was another object.
+                        // If yes, then attack.
+                        match objs.iter_mut().find(|x| x.pos == new_pos && x.blocking) {
+                            Some(other) => {
+                                let msg = o.attack(other);
+                                // Append an attack message
                                 self.messages.push(msg);
+                                if !other.alive {
+                                    let msg = Message::new(format!("{} dies!", other.name));
+                                    self.messages.push(msg);
+                                }
                             }
-                            break;
+                            None => {}
                         }
-                        None => {}
                     }
                 }
             }
+            objs[i] = o;
         }
+        self.objects = objs;
 
         // Update FOV
         let player_pos = self.get_player().pos;
@@ -216,22 +223,20 @@ impl<'a> GameState<'a> {
             }
         }
         // Draw non-blocking objects
-        for o in self.objects[1..].iter().filter(|x| !x.blocking) {
+        for o in self.objects.iter().filter(|x| !x.blocking) {
             &self.render_object(con, o);
         }
         // Draw blocking objects
-        for o in self.objects[1..].iter().filter(|x| x.blocking) {
+        for o in self.objects.iter().filter(|x| x.blocking) {
             &self.render_object(con, o);
         }
-        // Draw player
-        let player = self.objects[0];
-        player.draw(player.pos - self.cam_pos(), con);
     }
 
     fn render_gui(&self, con: &mut Offscreen) {
         let idx = max(self.messages.len() as i32 - 5, 0);
         let tail = &self.messages[idx as usize..];
         for i in 0..tail.len() {
+            con.set_default_foreground(tail[i].color);
             con.print(0, 40 + i as i32, &tail[i].text);
         }
     }
@@ -256,12 +261,14 @@ impl<'a> GameState<'a> {
 
     /// Tell the player object to do a move action on the next tick.
     pub fn player_move(&mut self, delta: Pos) {
-        if delta != Pos::zero() {
-            self.get_player_mut().action = Action::Move(delta);
-        } else {
-            self.get_player_mut().action = Action::Idle;
+        let new_action = match delta.to_dir() {
+            Some(dir) => Action::Move(dir),
+            None      => Action::Idle,
+        };
+        match self.get_player_mut().controller {
+            Controller::PlayerController{ref mut action} => *action = new_action,
+            _ => panic!("Player object does not have a PlayerController"),
         }
-        self.update();
     }
 
     pub fn is_walkable(&self, pos: Pos) -> bool {
@@ -275,6 +282,11 @@ impl<'a> GameState<'a> {
 
     pub fn object_at(&self, pos: Pos) -> Option<usize> {
         self.objects.iter().position(|x| x.pos == pos)
+    }
+
+    pub fn check_los(&self, a: Pos, b: Pos) -> bool {
+        let mut line = Line::new(a.tup(), b.tup());
+        line.all(|(x, y)| self.is_visible(Pos::new(x, y)))
     }
 }
 

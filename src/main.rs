@@ -65,9 +65,13 @@ fn handle_keys(tcod: &mut Tcod, state: &mut GameState) -> bool {
     // Handle movement
     let delta = match key {
         Key { printable: 'h', .. } => Some((-1,  0)),
+        Key { code: KC::Left, .. } => Some((-1,  0)),
         Key { printable: 'l', .. } => Some(( 1,  0)),
+        Key { code: KC::Right, .. } => Some((1,  0)),
         Key { printable: 'k', .. } => Some(( 0, -1)),
+        Key { code: KC::Up, .. } => Some((0, -1)),
         Key { printable: 'j', .. } => Some(( 0,  1)),
+        Key { code: KC::Down, .. } => Some((0,  1)),
         Key { printable: 'y', .. } => Some((-1, -1)),
         Key { printable: 'u', .. } => Some(( 1, -1)),
         Key { printable: 'b', .. } => Some((-1,  1)),
