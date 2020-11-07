@@ -6,7 +6,8 @@ use tcod::input::Key;
 use tcod::input::KeyCode as KC;
 
 use rustpunk::gamestate::GameState;
-use rustpunk::pos::Pos;
+use rustpunk::object::Action;
+use rustpunk::pos::*;
 
 const SCREEN_WIDTH: i32 = 80;
 const SCREEN_HEIGHT: i32 = 50;
@@ -33,8 +34,6 @@ fn main() {
     
     state.update();
     while !tcod.root.window_closed() {
-        let player_pos = state.get_player().pos;
-        let win_dim = Pos::new(tcod.con.width()/2, tcod.con.height()/2);
         state.render(&mut tcod.con);
         blit(
             &tcod.con, 
@@ -63,26 +62,26 @@ fn handle_keys(tcod: &mut Tcod, state: &mut GameState) -> bool {
     }
 
     // Handle movement
-    let delta = match key {
-        Key { printable: 'h', .. } => Some((-1,  0)),
-        Key { code: KC::Left, .. } => Some((-1,  0)),
-        Key { printable: 'l', .. } => Some(( 1,  0)),
-        Key { code: KC::Right, .. } => Some((1,  0)),
-        Key { printable: 'k', .. } => Some(( 0, -1)),
-        Key { code: KC::Up, .. } => Some((0, -1)),
-        Key { printable: 'j', .. } => Some(( 0,  1)),
-        Key { code: KC::Down, .. } => Some((0,  1)),
-        Key { printable: 'y', .. } => Some((-1, -1)),
-        Key { printable: 'u', .. } => Some(( 1, -1)),
-        Key { printable: 'b', .. } => Some((-1,  1)),
-        Key { printable: 'n', .. } => Some(( 1,  1)),
-        Key { printable: '.', .. } => Some(( 0,  0)),
-        _                          => None,
+    let action = match key {
+        Key { printable: 'h', .. }  => Some(Action::Move(Dir::W)),
+        Key { code: KC::Left, .. }  => Some(Action::Move(Dir::W)),
+        Key { printable: 'l', .. }  => Some(Action::Move(Dir::E)),
+        Key { code: KC::Right, .. } => Some(Action::Move(Dir::E)),
+        Key { printable: 'k', .. }  => Some(Action::Move(Dir::N)),
+        Key { code: KC::Up, .. }    => Some(Action::Move(Dir::N)),
+        Key { printable: 'j', .. }  => Some(Action::Move(Dir::S)),
+        Key { code: KC::Down, .. }  => Some(Action::Move(Dir::S)),
+        Key { printable: 'y', .. }  => Some(Action::Move(Dir::NW)),
+        Key { printable: 'u', .. }  => Some(Action::Move(Dir::NE)),
+        Key { printable: 'b', .. }  => Some(Action::Move(Dir::SW)),
+        Key { printable: 'n', .. }  => Some(Action::Move(Dir::SE)),
+        Key { printable: '.', .. }  => Some(Action::Idle),
+        _                           => None,
     };
 
-    match delta {
-        Some((dx, dy)) => {
-            state.player_move(Pos::new(dx, dy));
+    match action {
+        Some(a) => {
+            state.player_action(a);
             state.update();
         }
         None => {}

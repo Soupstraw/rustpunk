@@ -4,7 +4,7 @@ use array2d::Array2D;
 
 use crate::rustpunk::tile::Tile;
 use crate::rustpunk::object::*;
-use crate::rustpunk::pos::Pos;
+use crate::rustpunk::pos::*;
 use crate::rustpunk::message::Message;
 
 use tcod::line::*;
@@ -17,6 +17,11 @@ use tcod::map::FovAlgorithm;
 const MAP_SIZE: i32 = 128;
 const VIEWPORT_WIDTH: i32 = 80;
 const VIEWPORT_HEIGHT: i32 = 50;
+const MSG_DISPLAY_COUNT: i32 = 5;
+const HEALTH_BAR_WIDTH: i32 = 20;
+const HEALTH_BAR_BG_COLOR: Color = DARKEST_RED;
+const HEALTH_BAR_FG_COLOR: Color = RED;
+const DEFAULT_BACKGROUND_COLOR: Color = BLACK;
 
 /// Map and related data.
 pub struct Map {
@@ -231,12 +236,31 @@ impl<'a> GameState<'a> {
     }
 
     fn render_gui(&self, con: &mut Offscreen) {
-        let idx = max(self.messages.len() as i32 - 5, 0);
+        let idx = max(self.messages.len() as i32 - MSG_DISPLAY_COUNT, 0);
         let tail = &self.messages[idx as usize..];
         for i in 0..tail.len() {
             con.set_default_foreground(tail[i].color);
-            con.print(0, VIEWPORT_HEIGHT - 1 - i as i32, &tail[i].text);
+            con.print(
+                0, 
+                VIEWPORT_HEIGHT - MSG_DISPLAY_COUNT + i as i32, 
+                &tail[i].text);
         }
+        let player = self.get_player();
+        let player_health_ratio: f32 = player.health as f32 / player.max_health as f32;
+        for i in 0..HEALTH_BAR_WIDTH {
+            let color = if player_health_ratio <= i as f32 / HEALTH_BAR_WIDTH as f32 {
+                HEALTH_BAR_BG_COLOR
+            } else {
+                HEALTH_BAR_FG_COLOR
+            };
+            con.set_default_background(color);
+            con.put_char(
+                i,
+                VIEWPORT_HEIGHT - MSG_DISPLAY_COUNT - 1,
+                ' ',
+                BackgroundFlag::Set)
+        }
+        con.set_default_background(DEFAULT_BACKGROUND_COLOR);
     }
 
     /// Get a mutable reference to the player object.
@@ -257,14 +281,9 @@ impl<'a> GameState<'a> {
         }
     }
 
-    /// Tell the player object to do a move action on the next tick.
-    pub fn player_move(&mut self, delta: Pos) {
-        let new_action = match delta.to_dir() {
-            Some(dir) => Action::Move(dir),
-            None      => Action::Idle,
-        };
+    pub fn player_action(&mut self, a: Action) {
         match self.get_player_mut().controller {
-            Controller::PlayerController{ref mut action} => *action = new_action,
+            Controller::PlayerController{ref mut action} => *action = a,
             _ => panic!("Player object does not have a PlayerController"),
         }
     }
