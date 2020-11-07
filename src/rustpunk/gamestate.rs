@@ -111,9 +111,8 @@ impl<'a> GameState<'a> {
     /// Advances the game state by one tick.
     pub fn update(&mut self) {
         // Update objects
-        let mut objs = self.objects.clone();
-        for i in 0..objs.len() {
-            let mut o = objs[i];
+        for i in 0..self.objects.len() {
+            let mut o = self.objects[i];
             // Do nothing if object is dead
             if !o.alive {
                 continue;
@@ -129,7 +128,7 @@ impl<'a> GameState<'a> {
                     } else {
                         // Check whether the thing in the way was another object.
                         // If yes, then attack.
-                        match objs.iter_mut().find(|x| x.pos == new_pos && x.blocking) {
+                        match self.objects.iter_mut().find(|x| x.pos == new_pos && x.blocking) {
                             Some(other) => {
                                 let msg = o.attack(other);
                                 // Append an attack message
@@ -144,9 +143,8 @@ impl<'a> GameState<'a> {
                     }
                 }
             }
-            objs[i] = o;
+            self.objects[i] = o;
         }
-        self.objects = objs;
 
         // Update FOV
         let player_pos = self.get_player().pos;
@@ -237,7 +235,7 @@ impl<'a> GameState<'a> {
         let tail = &self.messages[idx as usize..];
         for i in 0..tail.len() {
             con.set_default_foreground(tail[i].color);
-            con.print(0, 40 + i as i32, &tail[i].text);
+            con.print(0, VIEWPORT_HEIGHT - 1 - i as i32, &tail[i].text);
         }
     }
 
