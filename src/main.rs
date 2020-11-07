@@ -1,9 +1,7 @@
 mod rustpunk;
 
+use tcod::input::*;
 use tcod::console::*;
-
-use tcod::input::Key;
-use tcod::input::KeyCode as KC;
 
 use rustpunk::gamestate::GameState;
 use rustpunk::object::Action;
@@ -45,47 +43,100 @@ fn main() {
             1.0
         );
         tcod.root.flush();
-        let exit = handle_keys(&mut tcod, &mut state);
-        if exit {
+        if handle_keys(&mut tcod, &mut state) {
             break;
         }
     }
 }
 
+enum Command {
+    MoveN,
+    MoveE,
+    MoveS,
+    MoveW,
+    MoveNE,
+    MoveNW,
+    MoveSE,
+    MoveSW,
+    Wait,
+    ExitGame,
+}
+
 fn handle_keys(tcod: &mut Tcod, state: &mut GameState) -> bool {
     // Get the last keypress
-    let key = tcod.root.wait_for_keypress(true);
+    let maybe_key = check_for_event(KEY_PRESS);
+    // Consume all remaining events (hack, because every keypress generates
+    // two events and the flags seem to not have a way to filter those)
+    events().last();
 
-    // Check whether to exit the game
-    if key.code == KC::Escape {
-        return true
-    }
+    match maybe_key {
+        Some((_,Event::Key(key))) => {
+            // Check whether to exit the game
+            // Handle movement
+            let command = match key {
+                Key { printable: 'h', .. }         => Some(Command::MoveW),
+                Key { code: KeyCode::Left, .. }    => Some(Command::MoveW),
+                Key { printable: 'l', .. }         => Some(Command::MoveE),
+                Key { code: KeyCode::Right, .. }   => Some(Command::MoveE),
+                Key { printable: 'k', .. }         => Some(Command::MoveN),
+                Key { code: KeyCode::Up, .. }      => Some(Command::MoveN),
+                Key { printable: 'j', .. }         => Some(Command::MoveS),
+                Key { code: KeyCode::Down, .. }    => Some(Command::MoveS),
+                Key { printable: 'y', .. }         => Some(Command::MoveNW),
+                Key { printable: 'u', .. }         => Some(Command::MoveNE),
+                Key { printable: 'b', .. }         => Some(Command::MoveSW),
+                Key { printable: 'n', .. }         => Some(Command::MoveSE),
+                Key { printable: '.', .. }         => Some(Command::Wait),
+                Key { code: KeyCode::Escape, .. }  => Some(Command::ExitGame),
+                _                                  => None,
+            };
 
-    // Handle movement
-    let action = match key {
-        Key { printable: 'h', .. }  => Some(Action::Move(Dir::W)),
-        Key { code: KC::Left, .. }  => Some(Action::Move(Dir::W)),
-        Key { printable: 'l', .. }  => Some(Action::Move(Dir::E)),
-        Key { code: KC::Right, .. } => Some(Action::Move(Dir::E)),
-        Key { printable: 'k', .. }  => Some(Action::Move(Dir::N)),
-        Key { code: KC::Up, .. }    => Some(Action::Move(Dir::N)),
-        Key { printable: 'j', .. }  => Some(Action::Move(Dir::S)),
-        Key { code: KC::Down, .. }  => Some(Action::Move(Dir::S)),
-        Key { printable: 'y', .. }  => Some(Action::Move(Dir::NW)),
-        Key { printable: 'u', .. }  => Some(Action::Move(Dir::NE)),
-        Key { printable: 'b', .. }  => Some(Action::Move(Dir::SW)),
-        Key { printable: 'n', .. }  => Some(Action::Move(Dir::SE)),
-        Key { printable: '.', .. }  => Some(Action::Idle),
-        _                           => None,
-    };
-
-    match action {
-        Some(a) => {
-            state.player_action(a);
-            state.update();
+            return command.map(|x| handle_command(state, x)).unwrap_or(false);
         }
-        None => {}
+        _ => return false,
     }
-    false
+
+    fn handle_command(state: &mut GameState, command: Command) -> bool {
+        match command {
+            Command::MoveS => {
+                state.player_action(Action::Move(Dir::S));
+                state.update();
+            }
+            Command::MoveN => {
+                state.player_action(Action::Move(Dir::N));
+                state.update();
+            }
+            Command::MoveE => {
+                state.player_action(Action::Move(Dir::E));
+                state.update();
+            }
+            Command::MoveW => {
+                state.player_action(Action::Move(Dir::W));
+                state.update();
+            }
+            Command::MoveNW => {
+                state.player_action(Action::Move(Dir::NW));
+                state.update();
+            }
+            Command::MoveNE => {
+                state.player_action(Action::Move(Dir::NE));
+                state.update();
+            }
+            Command::MoveSW => {
+                state.player_action(Action::Move(Dir::SW));
+                state.update();
+            }
+            Command::MoveSE => {
+                state.player_action(Action::Move(Dir::SE));
+                state.update();
+            }
+            Command::Wait => {
+                state.player_action(Action::Idle);
+                state.update();
+            }
+            Command::ExitGame => return true,
+        };
+        false
+    }
 }
 
