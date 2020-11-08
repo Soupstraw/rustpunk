@@ -1,6 +1,7 @@
 use crate::rustpunk::pos::*;
 use crate::rustpunk::message::Message;
 use crate::rustpunk::gamestate::GameState;
+use crate::rustpunk::item::*;
 
 use tcod::colors::*;
 use tcod::console::*;
@@ -10,12 +11,13 @@ use tcod::random::*;
 pub enum Action {
     Idle,
     Move(Dir),
+    Get(i32),
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Faction {
-    Neutral,
-    Enemy,
+    Player,
+    Wolves,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -38,7 +40,7 @@ impl Controller {
         }
     }
 
-    pub fn next_action(&self, obj: &Object ,gs: &GameState) -> Action {
+    pub fn next_action(&self, obj: &Character ,gs: &GameState) -> Action {
         match self {
             Controller::Dummy => Action::Idle,
             Controller::PlayerController {action} => *action,
@@ -51,7 +53,7 @@ impl Controller {
         }
     }
 
-    pub fn update(&mut self, obj: &Object, gs: &GameState) {
+    pub fn update(&mut self, obj: &Character, gs: &GameState) {
         match self {
             Controller::AggressiveAI {ref mut last_player_pos} => {
                 let player = gs.get_player();
@@ -71,75 +73,74 @@ pub struct StatBlock {
     con: i32,
 }
 
-#[derive(Clone, Copy, Debug)]
-pub enum Health {
-    HitPoints(i32),
-    Invincible,
-}
-
 #[derive(Clone, Debug)]
-pub struct Object {
+pub struct Character {
     pub pos: Pos,
     pub char: char,
     pub color: Color,
     pub name: &'static str,
-    pub health: Health,
+    pub health: i32,
     pub faction: Faction,
     pub alive: bool,
     pub blocking: bool,
-    pub stat_block: Option<StatBlock>,
+    pub stat_block: StatBlock,
     pub controller: Box<Controller>,
+    pub inventory: Inventory,
 }
 
-impl Object {
-    pub fn new(pos: Pos, char: char, color: Color, name: &'static str) -> Object {
-        Object { 
+impl Character {
+    pub fn new(
+        pos: Pos, 
+        char: char, 
+        color: Color, 
+        name: &'static str, 
+        faction: Faction) -> Character {
+
+        Character {
             pos: pos, 
             char: char, 
             color: color,
             name: name,
-            health: Health::HitPoints(10),
-            stat_block: Some(StatBlock {
+            health: 10,
+            stat_block: StatBlock {
                 str: 10,
                 agi: 10,
                 con: 10,
-            }),
-            faction: Faction::Neutral,
+            },
+            faction: faction,
             alive: true,
             blocking: true,
             controller: Box::new(Controller::Dummy),
+            inventory: Inventory::new(),
         }
     }
 
-    pub fn player(pos: Pos) -> Object {
-        let mut o = Object::new(pos, '@', WHITE, "player");
-        o.health = Health::HitPoints(o.max_health());
+    pub fn player(pos: Pos) -> Character {
+        let mut o = Character::new(pos, '@', WHITE, "player", Faction::Player);
+        o.health = o.max_health();
+        o.faction = Faction::Player;
         o.controller = Box::new(Controller::player_controller());
         o
     }
 
-    pub fn wolf(pos: Pos) -> Object {
-        let mut o = Object::new(pos, 'w', DARK_GREY, "grey wolf");
-        o.health = Health::HitPoints(o.max_health());
+    pub fn wolf(pos: Pos) -> Character {
+        let mut o = Character::new(pos, 'w', DARK_GREY, "grey wolf", Faction::Wolves);
+        o.health = o.max_health();
         o.controller = Box::new(Controller::aggressive_ai());
-        o.stat_block = Some(StatBlock {
+        o.stat_block = StatBlock {
             str: 6,
             agi: 8,
             con: 6,
-        });
+        };
         o
     }
 
     pub fn max_health(&self) -> i32 {
-        let ref stat_block = self.stat_block
-            .expect("missing stat block");
-        stat_block.con / 2
+        self.stat_block.con / 2
     }
 
     pub fn max_damage(&self) -> i32 {
-        let stat_block = self.stat_block
-            .expect("missing stat block");
-        stat_block.str / 2
+        self.stat_block.str / 2
     }
 
     pub fn draw(&self, pos: Pos, con: &mut dyn Console) {
@@ -160,9 +161,7 @@ impl Object {
         *self.controller = controller;
     }
 
-    pub fn attack(&self, other: &mut Object) -> Message {
-        let stat_block = self.stat_block
-            .expect("attacker does not have a stat block");
+    pub fn attack(&self, other: &mut Character) -> Message {
         let damage = self.roll_damage();
         other.take_damage(damage);
         let msg = format!(
@@ -172,14 +171,9 @@ impl Object {
     }
 
     pub fn take_damage(&mut self, damage: i32) {
-        match self.health {
-            Health::HitPoints(ref mut hp) => {
-                *hp -= damage;
-                if *hp <= 0 {
-                    self.die();
-                }
-            }
-            Invincible => {}
+        self.health -= damage;
+        if self.health <= 0 {
+            self.die();
         }
     }
 
@@ -188,6 +182,12 @@ impl Object {
         self.char = '%';
         self.color = DARK_RED;
         self.alive = false;
+        let corpse = Box::new(self.make_corpse());
+        self.inventory.add_item(corpse);
+    }
+
+    fn make_corpse(&self) -> Item {
+        Item::new(format!("corpse of {}", self.name), format!("It's a corpse."))
     }
 
     pub fn next_action(&self, gs: &GameState) -> Action {

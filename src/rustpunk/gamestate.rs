@@ -64,7 +64,7 @@ impl Map {
 /// need to be stored in the savefile when the game is saved.
 pub struct GameState {
     map: Map,
-    objects: Vec<RefCell<Object>>,
+    objects: Vec<RefCell<Character>>,
     messages: Vec<Message>,
 }
 
@@ -89,7 +89,7 @@ impl GameState {
                 rng.get_int(0, MAP_SIZE-1), 
                 rng.get_int(0, MAP_SIZE-1));
             if self.is_walkable(pos) {
-                self.objects.push(RefCell::new(Object::player(pos)));
+                self.objects.push(RefCell::new(Character::player(pos)));
                 break
             }
         }
@@ -99,7 +99,7 @@ impl GameState {
                     rng.get_int(0, MAP_SIZE-1), 
                     rng.get_int(0, MAP_SIZE-1));
                 if self.is_walkable(pos) {
-                    self.objects.push(RefCell::new(Object::wolf(pos)));
+                    self.objects.push(RefCell::new(Character::wolf(pos)));
                     break
                 }
             }
@@ -144,6 +144,21 @@ impl GameState {
                                     self.messages.push(msg);
                                 }
                             }
+                        }
+                    }
+                }
+                Action::Get(item_i) => {
+                    for j in 0..self.objects.len() {
+                        if i == j {
+                            // No point getting stuff from our own inventory
+                            continue;
+                        }
+                        let ref mut other = self.objects[j].borrow_mut();
+                        if !other.alive {
+                            let item = other.inventory.remove_item(item_i);
+                            o.inventory.add_item(item);
+                        } else {
+                            panic!("Attempting to take stuff from a living being!");
                         }
                     }
                 }
@@ -192,7 +207,7 @@ impl GameState {
         self.get_player().pos - Pos::new(VIEWPORT_WIDTH/2, VIEWPORT_HEIGHT/2)
     }
 
-    fn render_object(&self, con: &mut dyn Console, o: &Object) {
+    fn render_object(&self, con: &mut dyn Console, o: &Character) {
         if self.is_visible(o.pos){
             let view_pos = o.pos - self.cam_pos();
             if view_pos.x >= 0 && view_pos.x < VIEWPORT_WIDTH &&
@@ -253,45 +268,40 @@ impl GameState {
                 &tail[i].text);
         }
         let player = self.get_player();
-        match player.health {
-            Health::HitPoints(health) => {
-                let player_health_ratio: f32 = health as f32 / player.max_health() as f32;
-                con.set_default_foreground(WHITE);
-                con.print(0, VIEWPORT_HEIGHT - MSG_DISPLAY_COUNT - 2, "HP");
-                for i in 0..HEALTH_BAR_WIDTH {
-                    let color = if player_health_ratio <= i as f32 / HEALTH_BAR_WIDTH as f32 {
-                        HEALTH_BAR_BG_COLOR
-                    } else {
-                        HEALTH_BAR_FG_COLOR
-                    };
-                    con.set_default_background(color);
-                    con.put_char(
-                        i+3,
-                        VIEWPORT_HEIGHT - MSG_DISPLAY_COUNT - 2,
-                        ' ',
-                        BackgroundFlag::Set)
-                }
-            }
-            Invincible => {}
+        let player_health_ratio: f32 = player.health as f32 / player.max_health() as f32;
+        con.set_default_foreground(WHITE);
+        con.print(0, VIEWPORT_HEIGHT - MSG_DISPLAY_COUNT - 2, "HP");
+        for i in 0..HEALTH_BAR_WIDTH {
+            let color = if player_health_ratio <= i as f32 / HEALTH_BAR_WIDTH as f32 {
+                HEALTH_BAR_BG_COLOR
+            } else {
+                HEALTH_BAR_FG_COLOR
+            };
+            con.set_default_background(color);
+            con.put_char(
+                i+3,
+                VIEWPORT_HEIGHT - MSG_DISPLAY_COUNT - 2,
+                ' ',
+                BackgroundFlag::Set)
         }
         con.set_default_background(DEFAULT_BACKGROUND_COLOR);
     }
 
     /// Get a mutable reference to the player object.
-    pub fn get_player_mut(&mut self) -> RefMut<Object> {
+    pub fn get_player_mut(&mut self) -> RefMut<Character> {
         self.get_object_mut(0)
     }
 
     /// Get a reference to the player object.
-    pub fn get_player(&self) -> Ref<Object> {
+    pub fn get_player(&self) -> Ref<Character> {
         self.get_object(0)
     }
 
-    pub fn get_object(&self, i: usize) -> Ref<Object> {
+    pub fn get_object(&self, i: usize) -> Ref<Character> {
         self.objects[i].borrow()
     }
 
-    pub fn get_object_mut(&mut self, i: usize) -> RefMut<Object> {
+    pub fn get_object_mut(&mut self, i: usize) -> RefMut<Character> {
         self.objects[i].borrow_mut()
     }
 
@@ -300,6 +310,7 @@ impl GameState {
             Controller::PlayerController{ref mut action} => *action = a,
             _ => panic!("Player object does not have a PlayerController"),
         }
+        self.update();
     }
 
     pub fn is_walkable(&self, pos: Pos) -> bool {
