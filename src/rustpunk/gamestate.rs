@@ -158,7 +158,7 @@ impl<'a> GameState<'a> {
             player_pos.y, 
             32, 
             true, 
-            FovAlgorithm::Basic);
+            FovAlgorithm::Diamond);
 
         // Update fog of war
         for x in 0..MAP_SIZE {
