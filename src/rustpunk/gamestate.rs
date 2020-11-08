@@ -1,3 +1,4 @@
+use core::cell::*;
 use std::cmp::Ordering;
 use core::cmp::max;
 use array2d::Array2D;
@@ -10,7 +11,6 @@ use crate::rustpunk::message::Message;
 use tcod::line::*;
 use tcod::console::*;
 use tcod::colors::*;
-use tcod::bsp::*;
 use tcod::random::Rng;
 use tcod::map::FovAlgorithm;
 
@@ -62,13 +62,13 @@ impl Map {
 
 /// The game state structure contains everything that would
 /// need to be stored in the savefile when the game is saved.
-pub struct GameState<'a> {
+pub struct GameState {
     map: Map,
-    objects: Vec<Object<'a>>,
+    objects: Vec<RefCell<Object>>,
     messages: Vec<Message>,
 }
 
-impl<'a> GameState<'a> {
+impl GameState {
     /// Instantiates a fresh game state
     pub fn new() -> Self {
         let map = make_map();
@@ -83,58 +83,59 @@ impl<'a> GameState<'a> {
 
     /// Randomly populates the map with NPCs
     pub fn populate(&mut self) {
-        let mut npcs = Vec::new();
         let rng = Rng::get_instance();
         loop {
             let pos = Pos::new(
                 rng.get_int(0, MAP_SIZE-1), 
                 rng.get_int(0, MAP_SIZE-1));
             if self.is_walkable(pos) {
-                let mut player = Object::new(pos, '@', WHITE, "player");
-                player.controller = Controller::player_controller();
-                npcs.push(player);
+                self.objects.push(RefCell::new(Object::player(pos)));
                 break
             }
         }
-        for _ in 1..5 {
+        for _ in 1..20 {
             for _ in 1..1000 {
                 let pos = Pos::new(
                     rng.get_int(0, MAP_SIZE-1), 
                     rng.get_int(0, MAP_SIZE-1));
                 if self.is_walkable(pos) {
-                    let mut npc = Object::new(pos, '@', BLUE, "innocent bystander");
-                    npc.controller = Controller::aggressive_ai();
-                    npc.faction = Faction::Enemy;
-                    npcs.push(npc);
+                    self.objects.push(RefCell::new(Object::wolf(pos)));
                     break
                 }
             }
         }
-        self.objects = npcs;
     }
 
     /// Advances the game state by one tick.
     pub fn update(&mut self) {
         // Update objects
         for i in 0..self.objects.len() {
-            let mut o = self.objects[i];
+            let ref mut o = self.objects[i].borrow_mut();
             // Do nothing if object is dead
             if !o.alive {
                 continue;
             }
+            o.update(self);
+            let action = o.next_action(self);
+            let o_pos = o.pos;
             // Ask the controller for the next action
-            match o.next_action(self) {
+            match action {
                 Action::Idle      => {}
                 Action::Move(pos) => {
-                    let new_pos = pos.to_pos() + o.pos;
+                    let new_pos = pos.to_pos() + o_pos;
                     if self.is_walkable(new_pos) {
                         // Walk if there is nothing in the way
                         o.pos = new_pos;
                     } else {
                         // Check whether the thing in the way was another object.
                         // If yes, then attack.
-                        match self.objects.iter_mut().find(|x| x.pos == new_pos && x.blocking) {
-                            Some(other) => {
+                        for j in 0..self.objects.len() {
+                            if i == j {
+                                // We don't want to attack ourselves
+                                continue;
+                            }
+                            let ref mut other = self.objects[j].borrow_mut();
+                            if other.pos == new_pos {
                                 let msg = o.attack(other);
                                 // Append an attack message
                                 self.messages.push(msg);
@@ -143,12 +144,10 @@ impl<'a> GameState<'a> {
                                     self.messages.push(msg);
                                 }
                             }
-                            None => {}
                         }
                     }
                 }
             }
-            self.objects[i] = o;
         }
 
         // Update FOV
@@ -228,12 +227,18 @@ impl<'a> GameState<'a> {
             }
         }
         // Draw non-blocking objects
-        for o in self.objects.iter().filter(|x| !x.blocking) {
-            &self.render_object(con, o);
+        for i in 0..self.objects.len() {
+            let ref o = self.get_object(i);
+            if !o.blocking {
+                &self.render_object(con, o);
+            }
         }
         // Draw blocking objects
-        for o in self.objects.iter().filter(|x| x.blocking) {
-            &self.render_object(con, o);
+        for i in 0..self.objects.len() {
+            let ref o = self.get_object(i);
+            if o.blocking {
+                &self.render_object(con, o);
+            }
         }
     }
 
@@ -248,45 +253,50 @@ impl<'a> GameState<'a> {
                 &tail[i].text);
         }
         let player = self.get_player();
-        let player_health_ratio: f32 = player.health as f32 / player.max_health as f32;
-        con.set_default_foreground(WHITE);
-        con.print(0, VIEWPORT_HEIGHT - MSG_DISPLAY_COUNT - 2, "HP");
-        for i in 0..HEALTH_BAR_WIDTH {
-            let color = if player_health_ratio <= i as f32 / HEALTH_BAR_WIDTH as f32 {
-                HEALTH_BAR_BG_COLOR
-            } else {
-                HEALTH_BAR_FG_COLOR
-            };
-            con.set_default_background(color);
-            con.put_char(
-                i+3,
-                VIEWPORT_HEIGHT - MSG_DISPLAY_COUNT - 2,
-                ' ',
-                BackgroundFlag::Set)
+        match player.health {
+            Health::HitPoints(health) => {
+                let player_health_ratio: f32 = health as f32 / player.max_health() as f32;
+                con.set_default_foreground(WHITE);
+                con.print(0, VIEWPORT_HEIGHT - MSG_DISPLAY_COUNT - 2, "HP");
+                for i in 0..HEALTH_BAR_WIDTH {
+                    let color = if player_health_ratio <= i as f32 / HEALTH_BAR_WIDTH as f32 {
+                        HEALTH_BAR_BG_COLOR
+                    } else {
+                        HEALTH_BAR_FG_COLOR
+                    };
+                    con.set_default_background(color);
+                    con.put_char(
+                        i+3,
+                        VIEWPORT_HEIGHT - MSG_DISPLAY_COUNT - 2,
+                        ' ',
+                        BackgroundFlag::Set)
+                }
+            }
+            Invincible => {}
         }
         con.set_default_background(DEFAULT_BACKGROUND_COLOR);
     }
 
     /// Get a mutable reference to the player object.
-    pub fn get_player_mut(&mut self) -> &mut Object<'a> {
-        let player = self.objects.get_mut(0);
-        match player {
-            Some(p) => p,
-            None    => panic!("Player not found!"),
-        }
+    pub fn get_player_mut(&mut self) -> RefMut<Object> {
+        self.get_object_mut(0)
     }
 
     /// Get a reference to the player object.
-    pub fn get_player(&self) -> &Object {
-        let player = self.objects.get(0);
-        match player {
-            Some(p) => p,
-            None    => panic!("Player not found!"),
-        }
+    pub fn get_player(&self) -> Ref<Object> {
+        self.get_object(0)
+    }
+
+    pub fn get_object(&self, i: usize) -> Ref<Object> {
+        self.objects[i].borrow()
+    }
+
+    pub fn get_object_mut(&mut self, i: usize) -> RefMut<Object> {
+        self.objects[i].borrow_mut()
     }
 
     pub fn player_action(&mut self, a: Action) {
-        match self.get_player_mut().controller {
+        match *self.get_player_mut().controller {
             Controller::PlayerController{ref mut action} => *action = a,
             _ => panic!("Player object does not have a PlayerController"),
         }
@@ -294,15 +304,24 @@ impl<'a> GameState<'a> {
 
     pub fn is_walkable(&self, pos: Pos) -> bool {
         let blocking_object = self
-            .object_at(pos)
-            .map(|i| self.objects[i].blocking)
+            .object_at_unsafe(pos)
+            .map(|i| self.get_object(i).blocking)
             .unwrap_or(false);
         !self.map.is_solid(pos) && !blocking_object
     }
 
-
-    pub fn object_at(&self, pos: Pos) -> Option<usize> {
-        self.objects.iter().position(|x| x.pos == pos)
+    pub fn object_at_unsafe(&self, pos: Pos) -> Option<usize> {
+        for i in 0..self.objects.len() {
+            match self.objects[i].try_borrow() {
+                Ok(r) => {
+                    if r.pos == pos {
+                        return Some(i);
+                    }
+                }
+                Err(_) => {}
+            }
+        }
+        None
     }
 
     pub fn check_los(&self, a: Pos, b: Pos) -> bool {
@@ -314,28 +333,17 @@ impl<'a> GameState<'a> {
 /// Generates a map using binary space partitioning. This will result in
 /// a map that resembles city streets.
 fn make_map() -> Map {
-    const STREET_WIDTH: i32 = 4;
     let mut map = Array2D::filled_with(
-        Tile::wall(), 
+        Tile::empty(), 
         MAP_SIZE as usize, 
         MAP_SIZE as usize);
-    let rng = &mut Rng::get_instance();
-    let bsp = &mut Bsp::new_with_size(0, 0, MAP_SIZE, MAP_SIZE);
-    bsp.split_recursive(Some(rng), 5, 20, 20, 1., 1.);
-    bsp.traverse(TraverseOrder::InOrder, |b| {
-        for x in b.x..b.x+b.w {
-            for y in b.y..b.y+b.h {
-                let draw_wall =
-                    x - b.x >= STREET_WIDTH && 
-                    y - b.y >= STREET_WIDTH;
-                if !draw_wall {
-                    map.set(x as usize, y as usize, Tile::empty())
-                        .expect("Could not set tile");
-                }
-            }
-        }
-        true
-    });
+    let rng = Rng::get_instance();
+    for _ in 0..MAP_SIZE*MAP_SIZE/5 {
+        let pos = Pos::new(
+            rng.get_int(0, MAP_SIZE-1), 
+            rng.get_int(0, MAP_SIZE-1));
+        map.set(pos.x as usize, pos.y as usize, Tile::wall());
+    }
     Map::new(map)
 }
 

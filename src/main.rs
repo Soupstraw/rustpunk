@@ -89,33 +89,32 @@ fn handle_keys(state: &mut GameState) -> bool {
         }
         _ => return false,
     }
-
-    fn handle_command(state: &mut GameState, command: Command) -> bool {
-        match command {
-            Command::MoveS => {
-                state.player_action(Action::Move(Dir::S));
-                state.update();
-            }
-            Command::MoveN => {
-                state.player_action(Action::Move(Dir::N));
-                state.update();
-            }
-            Command::MoveE => {
-                state.player_action(Action::Move(Dir::E));
-                state.update();
-            }
-            Command::MoveW => {
-                state.player_action(Action::Move(Dir::W));
-                state.update();
-            }
-            Command::Wait => {
-                state.player_action(Action::Idle);
-                state.update();
-            }
-            Command::ExitGame => return true,
-            Command::GetItem => println!("Not yet implemented"),
-        };
-        false
-    }
 }
 
+fn handle_command(state: &mut GameState, command: Command) -> bool {
+    match command {
+        Command::MoveS => {
+            state.player_action(Action::Move(Dir::S));
+            state.update();
+        }
+        Command::MoveN => {
+            state.player_action(Action::Move(Dir::N));
+            state.update();
+        }
+        Command::MoveE => {
+            state.player_action(Action::Move(Dir::E));
+            state.update();
+        }
+        Command::MoveW => {
+            state.player_action(Action::Move(Dir::W));
+            state.update();
+        }
+        Command::Wait => {
+            state.player_action(Action::Idle);
+            state.update();
+        }
+        Command::ExitGame => return true,
+        Command::GetItem => println!("Not yet implemented"),
+    };
+    false
+}
