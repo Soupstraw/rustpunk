@@ -43,7 +43,7 @@ fn main() {
             1.0
         );
         tcod.root.flush();
-        if handle_keys(&mut tcod, &mut state) {
+        if handle_keys(&mut state) {
             break;
         }
     }
@@ -54,15 +54,12 @@ enum Command {
     MoveE,
     MoveS,
     MoveW,
-    MoveNE,
-    MoveNW,
-    MoveSE,
-    MoveSW,
+    GetItem,
     Wait,
     ExitGame,
 }
 
-fn handle_keys(tcod: &mut Tcod, state: &mut GameState) -> bool {
+fn handle_keys(state: &mut GameState) -> bool {
     // Get the last keypress
     let maybe_key = check_for_event(KEY_PRESS);
     // Consume all remaining events (hack, because every keypress generates
@@ -82,11 +79,8 @@ fn handle_keys(tcod: &mut Tcod, state: &mut GameState) -> bool {
                 Key { code: KeyCode::Up, .. }      => Some(Command::MoveN),
                 Key { printable: 'j', .. }         => Some(Command::MoveS),
                 Key { code: KeyCode::Down, .. }    => Some(Command::MoveS),
-                Key { printable: 'y', .. }         => Some(Command::MoveNW),
-                Key { printable: 'u', .. }         => Some(Command::MoveNE),
-                Key { printable: 'b', .. }         => Some(Command::MoveSW),
-                Key { printable: 'n', .. }         => Some(Command::MoveSE),
                 Key { printable: '.', .. }         => Some(Command::Wait),
+                Key { printable: 'g', .. }         => Some(Command::GetItem),
                 Key { code: KeyCode::Escape, .. }  => Some(Command::ExitGame),
                 _                                  => None,
             };
@@ -114,27 +108,12 @@ fn handle_keys(tcod: &mut Tcod, state: &mut GameState) -> bool {
                 state.player_action(Action::Move(Dir::W));
                 state.update();
             }
-            Command::MoveNW => {
-                state.player_action(Action::Move(Dir::NW));
-                state.update();
-            }
-            Command::MoveNE => {
-                state.player_action(Action::Move(Dir::NE));
-                state.update();
-            }
-            Command::MoveSW => {
-                state.player_action(Action::Move(Dir::SW));
-                state.update();
-            }
-            Command::MoveSE => {
-                state.player_action(Action::Move(Dir::SE));
-                state.update();
-            }
             Command::Wait => {
                 state.player_action(Action::Idle);
                 state.update();
             }
             Command::ExitGame => return true,
+            Command::GetItem => println!("Not yet implemented"),
         };
         false
     }
