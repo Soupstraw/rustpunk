@@ -1,3 +1,4 @@
+use crate::rustpunk::item::Item;
 use core::cell::*;
 use std::cmp::Ordering;
 use core::cmp::max;
@@ -315,24 +316,37 @@ impl GameState {
 
     pub fn is_walkable(&self, pos: Pos) -> bool {
         let blocking_object = self
-            .object_at_unsafe(pos)
-            .map(|i| self.get_object(i).blocking)
-            .unwrap_or(false);
+            .objects_at_unsafe(pos)
+            .iter()
+            .any(|i| self.get_object(*i).blocking);
         !self.map.is_solid(pos) && !blocking_object
     }
 
-    pub fn object_at_unsafe(&self, pos: Pos) -> Option<usize> {
+    pub fn objects_at(&self, pos: Pos) -> Vec<i32> {
+        let mut indices = vec![];
         for i in 0..self.objects.len() {
             match self.objects[i].try_borrow() {
                 Ok(r) => {
                     if r.pos == pos {
-                        return Some(i);
+                        indices.push(i as i32);
                     }
                 }
-                Err(_) => {}
+                Err(_) => panic!("Could not borrow object"),
             }
         }
-        None
+        return indices;
+    }
+
+    fn objects_at_unsafe(&self, pos: Pos) -> Vec<usize> {
+        let mut indices = vec![];
+        for i in 0..self.objects.len() {
+            if let Ok(r) = self.objects[i].try_borrow() {
+                if r.pos == pos {
+                    indices.push(i);
+                }
+            }
+        }
+        return indices;
     }
 
     pub fn check_los(&self, a: Pos, b: Pos) -> bool {
@@ -358,18 +372,3 @@ fn make_map() -> Map {
     Map::new(map)
 }
 
-/// Mutably borrow two *separate* elements from the given slice.
-/// Panics when the indexes are equal or out of bounds.
-fn mut_two<T>(
-    first_index: usize, 
-    second_index: usize, 
-    items: &mut [T]) -> Option<(&mut T, &mut T)> {
-
-    let split_at_index = max(first_index, second_index);
-    let (first_slice, second_slice) = items.split_at_mut(split_at_index);
-    match first_index.cmp(&second_index) {
-        Ordering::Less    => Some((&mut first_slice[first_index], &mut second_slice[0])),
-        Ordering::Greater => Some((&mut second_slice[0], &mut first_slice[second_index])),
-        Ordering::Equal   => None,
-    }
-}

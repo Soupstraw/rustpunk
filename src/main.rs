@@ -1,89 +1,14 @@
 mod rustpunk;
 
-use core::cmp::*;
-
 use tcod::input::*;
 use tcod::console::*;
 
-use rustpunk::item::*;
-use rustpunk::gamestate::GameState;
+use rustpunk::view::*;
+use rustpunk::gamestate::*;
 use rustpunk::object::*;
 use rustpunk::pos::*;
 
-const SCREEN_WIDTH: i32 = 80;
-const SCREEN_HEIGHT: i32 = 50;
-const MENU_MARGIN: i32 = 5;
 const LIMIT_FPS: i32 = 50;
-
-#[derive(Copy, Clone, Debug, PartialEq)]
-enum GuiState {
-    Game,
-    Inventory,
-    GetMenu,
-    Menu,
-}
-
-enum Command {
-    Move(Dir),
-    GetItem,
-    Wait,
-    ExitGame,
-    Back,
-    OpenInventory,
-}
-
-trait View {
-    fn handle_command(&mut self, com: Command);
-    fn render(&self, con: &mut Offscreen);
-    fn is_active(&self) -> bool;
-}
-
-struct InventoryView {
-    items: Vec<String>,
-    cursor: i32,
-    active: bool,
-}
-
-impl InventoryView {
-    pub fn new(inventory: &Inventory) -> Self {
-        InventoryView {
-            items: inventory.items.iter().map(|x| x.name.clone()).collect(),
-            cursor: 0,
-            active: true,
-        }
-    }
-}
-
-impl View for InventoryView {
-    fn handle_command(&mut self, com: Command) {
-        match com {
-            Command::Move(Dir::N) => self.cursor = max(0, self.cursor-1),
-            Command::Move(Dir::S) => self.cursor = min(
-                self.items.len() as i32-1, 
-                self.cursor-1),
-            Command::Back => self.active = false,
-            _ => {}
-        }
-    }
-
-    fn render(&self, con: &mut Offscreen) {
-        con.print_frame(
-            MENU_MARGIN, 
-            MENU_MARGIN,
-            SCREEN_WIDTH-MENU_MARGIN*2,
-            SCREEN_HEIGHT-MENU_MARGIN*2,
-            true,
-            BackgroundFlag::Set,
-            Some("Inventory"));
-        for i in 0..self.items.len() {
-            con.print(MENU_MARGIN+2, MENU_MARGIN+2+i as i32, &self.items[i]);
-        }
-    }
-
-    fn is_active(&self) -> bool {
-        self.active
-    }
-}
 
 struct Game {
     state: GameState,
@@ -100,11 +25,7 @@ impl Game {
             self.handle_keys();
             self.state.render(&mut self.con);
             if let Some(view) = &self.view {
-                if view.is_active() {
-                    view.render(&mut self.con);
-                } else {
-                    self.view = None;
-                }
+                view.render(&mut self.con);
             }
             blit(
                 &self.con, 
@@ -139,7 +60,8 @@ impl Game {
                 Key { printable: '.', .. }         => Some(Command::Wait),
                 Key { printable: 'g', .. }         => Some(Command::GetItem),
                 Key { printable: 'i', .. }         => Some(Command::OpenInventory),
-                Key { code: KeyCode::Escape, .. }  => Some(Command::Back),
+                Key { code: KeyCode::Escape, .. }  => Some(Command::CloseView),
+                Key { code: KeyCode::Enter, .. }   => Some(Command::Select),
                 _                                  => None,
             };
 
@@ -148,18 +70,24 @@ impl Game {
     }
 
     fn handle_command(&mut self, command: Command){
-        match self.view {
-            Some(ref mut view) => {
-                view.handle_command(command);
+        let new_command;
+        if let Some(ref mut view) = self.view {
+            if let Some(c) = view.handle_command(&mut self.state, command) {
+                new_command = c;
+            } else {
+                return;
             }
-            None => match command {
-                Command::Move(dir) => self.state.player_action(Action::Move(dir)),
-                Command::Wait => self.state.player_action(Action::Idle),
-                Command::GetItem => self.open_pickup_menu(),
-                Command::Back => self.back(),
-                Command::OpenInventory => self.open_inventory(),
-                Command::ExitGame => self.quit(),
-            }
+        } else {
+            new_command = command;
+        }
+        match new_command {
+            Command::Move(dir) => self.state.player_action(Action::Move(dir)),
+            Command::Wait => self.state.player_action(Action::Idle),
+            Command::GetItem => self.open_pickup_menu(),
+            Command::CloseView => self.back(),
+            Command::OpenInventory => self.open_inventory(),
+            Command::ExitGame => self.quit(),
+            _ => {}
         }
     }
 
@@ -171,11 +99,19 @@ impl Game {
     }
 
     fn open_pickup_menu(&mut self) {
-
+        let invs = self.state.objects_at(self.state.get_player().pos);
+        let invs_fil: Vec<&i32> = invs.iter().filter(|x| **x != 0).collect();
+        if invs_fil.len() > 0 {
+            let other_idx = invs_fil.get(0).expect("There is supposed to be at least one element");
+            let ref player_inv = self.state.get_player().inventory;
+            let ref other_inv = self.state.get_object(**other_idx as usize).inventory;
+            let pickup_view = PickupView::new(player_inv, other_inv);
+            self.view = Some(Box::new(pickup_view));
+        }
     }
     
     fn back(&mut self) {
-
+        self.view = None;
     }
 
     fn quit(&mut self) {
