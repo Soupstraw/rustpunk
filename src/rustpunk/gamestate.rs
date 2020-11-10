@@ -148,16 +148,26 @@ impl GameState {
                         }
                     }
                 }
-                Action::Get(item_i) => {
+                Action::GetItem(item_i) => {
                     for j in 0..self.objects.len() {
-                        if i == j {
+                        if i == j || o.pos != self.objects[j].borrow().pos {
                             // No point getting stuff from our own inventory
                             continue;
                         }
                         let ref mut other = self.objects[j].borrow_mut();
+                        let item = other.inventory.remove_item(item_i);
+                        o.inventory.add_item(item);
+                    }
+                }
+                Action::DropItem(item_i) => {
+                    for j in 0..self.objects.len() {
+                        if i == j || o.pos != self.objects[j].borrow().pos {
+                            continue;
+                        }
+                        let ref mut other = self.objects[j].borrow_mut();
                         if !other.alive {
-                            let item = other.inventory.remove_item(item_i);
-                            o.inventory.add_item(item);
+                            let item = o.inventory.remove_item(item_i);
+                            other.inventory.add_item(item);
                         } else {
                             panic!("Attempting to take stuff from a living being!");
                         }

@@ -11,7 +11,8 @@ use tcod::random::*;
 pub enum Action {
     Idle,
     Move(Dir),
-    Get(i32),
+    GetItem(i32),
+    DropItem(i32),
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -40,7 +41,7 @@ impl Controller {
         }
     }
 
-    pub fn next_action(&self, obj: &Character ,gs: &GameState) -> Action {
+    pub fn next_action(&self, obj: &Character ,_gs: &GameState) -> Action {
         match self {
             Controller::Dummy => Action::Idle,
             Controller::PlayerController {action} => *action,

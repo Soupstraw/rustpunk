@@ -103,9 +103,7 @@ impl Game {
         let invs_fil: Vec<&i32> = invs.iter().filter(|x| **x != 0).collect();
         if invs_fil.len() > 0 {
             let other_idx = invs_fil.get(0).expect("There is supposed to be at least one element");
-            let ref player_inv = self.state.get_player().inventory;
-            let ref other_inv = self.state.get_object(**other_idx as usize).inventory;
-            let pickup_view = PickupView::new(player_inv, other_inv);
+            let pickup_view = PickupView::new(&self.state, **other_idx);
             self.view = Some(Box::new(pickup_view));
         }
     }
