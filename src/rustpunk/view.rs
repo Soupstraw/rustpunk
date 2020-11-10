@@ -110,6 +110,8 @@ impl View for PickupView {
                 } else {
                     self.other_cursor = min(self.other_cursor+1, self.other_items.len() as i32-1);
                 }
+                self.other_cursor = max(self.other_cursor, 0);
+                self.player_cursor = max(self.player_cursor, 0);
             }
             Command::Move(Dir::E) => {
                 if self.in_player_col {
