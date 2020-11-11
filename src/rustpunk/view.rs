@@ -32,10 +32,16 @@ pub struct InventoryView {
 
 impl InventoryView {
     pub fn new(inventory: &Inventory) -> Self {
-        InventoryView {
-            items: inventory.items.iter().map(|x| x.name.clone()).collect(),
+        let mut v = InventoryView {
+            items: vec![],
             cursor: 0,
-        }
+        };
+        v.update_items(inventory);
+        v
+    }
+
+    pub fn update_items(&mut self, inventory: &Inventory)  {
+        self.items =  inventory.items.iter().map(|x| x.name.clone()).collect();
     }
 }
 
@@ -45,8 +51,12 @@ impl View for InventoryView {
             Command::Move(Dir::N) => self.cursor = max(0, self.cursor-1),
             Command::Move(Dir::S) => self.cursor = min(
                 self.items.len() as i32-1, 
-                self.cursor-1),
+                self.cursor+1),
             Command::CloseView => return Some(Command::CloseView),
+            Command::Select => if self.items.len() > 0 {
+                state.use_item(0, self.cursor);
+                self.update_items(&state.get_player().inventory);
+            },
             _ => {}
         }
         None
@@ -62,8 +72,13 @@ impl View for InventoryView {
             BackgroundFlag::Set,
             Some("Inventory"));
         for i in 0..self.items.len() {
-            con.print(MENU_MARGIN+2, MENU_MARGIN+2+i as i32, &self.items[i]);
+            con.print(MENU_MARGIN+4, MENU_MARGIN+2+i as i32, &self.items[i]);
         }
+        con.put_char(
+            MENU_MARGIN+2, 
+            MENU_MARGIN+2+self.cursor as i32, 
+            '>', 
+            BackgroundFlag::Set);
     }
 }
 

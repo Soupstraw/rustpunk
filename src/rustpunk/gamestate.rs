@@ -1,3 +1,5 @@
+use core::cmp::min;
+use crate::rustpunk::item::ItemEffect;
 use crate::rustpunk::item::Item;
 use core::cell::*;
 use std::cmp::Ordering;
@@ -101,6 +103,17 @@ impl GameState {
                     rng.get_int(0, MAP_SIZE-1));
                 if self.is_walkable(pos) {
                     self.objects.push(RefCell::new(Character::wolf(pos)));
+                    break
+                }
+            }
+        }
+        for _ in 1..50 {
+            for _ in 1..1000 {
+                let pos = Pos::new(
+                    rng.get_int(0, MAP_SIZE-1), 
+                    rng.get_int(0, MAP_SIZE-1));
+                if self.is_walkable(pos) {
+                    self.objects.push(RefCell::new(Character::healing_potion(pos)));
                     break
                 }
             }
@@ -349,19 +362,51 @@ impl GameState {
 
     fn objects_at_unsafe(&self, pos: Pos) -> Vec<usize> {
         let mut indices = vec![];
+        let mut fails = 0;
         for i in 0..self.objects.len() {
-            if let Ok(r) = self.objects[i].try_borrow() {
-                if r.pos == pos {
+            match self.objects[i].try_borrow() {
+                Ok(r) => if r.pos == pos {
                     indices.push(i);
-                }
+                },
+                Err(_) => fails += 1,
             }
         }
+        // At most one object should be unborrowable
+        assert!(fails <= 1);
         return indices;
     }
 
     pub fn check_los(&self, a: Pos, b: Pos) -> bool {
         let mut line = Line::new(a.tup(), b.tup());
         line.all(|(x, y)| self.is_visible(Pos::new(x, y)))
+    }
+
+    pub fn apply_effect(&mut self, idx: i32, effect: &ItemEffect) {
+        match effect {
+            ItemEffect::Message(msg) => self.messages.push(Message::new(msg.to_string())),
+            ItemEffect::ChangeHealth(amt) => {
+                let ref mut obj = self.get_object_mut(idx as usize);
+                if *amt <= 0 {
+                    obj.take_damage(*amt);
+                } else {
+                    obj.heal(*amt);
+                }
+            }
+        }
+    }
+
+    pub fn use_item(&mut self, obj_idx: i32, item_idx: i32) {
+        let (consumable, effects) = {
+            let obj = self.get_object(obj_idx as usize);
+            let item = obj.inventory.get_item(item_idx);
+            (item.consumable, item.on_use.clone())
+        };
+        for effect in effects {
+            self.apply_effect(obj_idx, &effect);
+        }
+        if consumable {
+            self.get_object_mut(obj_idx as usize).inventory.remove_item(item_idx);
+        }
     }
 }
 

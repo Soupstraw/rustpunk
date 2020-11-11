@@ -1,3 +1,4 @@
+use core::cmp::min;
 use crate::rustpunk::pos::*;
 use crate::rustpunk::message::Message;
 use crate::rustpunk::gamestate::GameState;
@@ -19,6 +20,7 @@ pub enum Action {
 pub enum Faction {
     Player,
     Wolves,
+    Neutral,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -136,6 +138,21 @@ impl Character {
         o
     }
 
+    pub fn healing_potion(pos: Pos) -> Character {
+        let mut o = Character::new(pos, '!', DARK_RED, "healing potion", Faction::Neutral);
+        o.health = 1;
+        o.controller = Box::new(Controller::Dummy);
+        o.stat_block = StatBlock {
+            str: 0,
+            agi: 0,
+            con: 0
+        };
+        o.inventory.add_item(Box::new(Item::healing_potion()));
+        o.alive = false;
+        o.blocking = false;
+        o
+    }
+
     pub fn max_health(&self) -> i32 {
         self.stat_block.con / 2
     }
@@ -172,10 +189,16 @@ impl Character {
     }
 
     pub fn take_damage(&mut self, damage: i32) {
+        assert!(damage >= 0);
         self.health -= damage;
         if self.health <= 0 {
             self.die();
         }
+    }
+
+    pub fn heal(&mut self, amt: i32) {
+        assert!(amt >= 0);
+        self.health = min(self.health + amt, self.max_health());
     }
 
     pub fn die(&mut self) {
