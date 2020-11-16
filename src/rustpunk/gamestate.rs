@@ -232,6 +232,9 @@ impl GameState {
     }
 
     fn render_object(&self, con: &mut dyn Console, o: &Character) {
+        if !o.alive && o.inventory.items.len() == 0 {
+            return;
+        }
         if self.is_visible(o.pos){
             let view_pos = o.pos - self.cam_pos();
             if view_pos.x >= 0 && view_pos.x < VIEWPORT_WIDTH &&
@@ -350,7 +353,7 @@ impl GameState {
         for i in 0..self.objects.len() {
             match self.objects[i].try_borrow() {
                 Ok(r) => {
-                    if r.pos == pos {
+                    if r.pos == pos && r.inventory.items.len() > 0 {
                         indices.push(i as i32);
                     }
                 }
